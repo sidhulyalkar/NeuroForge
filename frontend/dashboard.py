@@ -4,6 +4,7 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from agents.spec_agent import SpecAgent
+from agents.code_agent import CodeAgent
 
 st.title("🧠 NeuroForge: BCI Middleware Builder")
 
@@ -14,3 +15,11 @@ if uploaded:
     spec = agent.run_from_content(content)
     st.subheader("Generated Pipeline Spec")
     st.json(spec)
+
+    # Generate code stubs
+    if st.button("Generate Code Stubs"):
+        with st.spinner("Generating code..."):
+            stubs = CodeAgent().generate_code(spec)
+        for layer, code in stubs.items():
+            st.markdown(f"#### {layer}.py")
+            st.code(code, language="python")
