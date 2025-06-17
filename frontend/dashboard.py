@@ -4,14 +4,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
+import logging
+
 from agents.spec_agent import SpecAgent
 from agents.code_agent import CodeAgent
 from pipeline import run_full_pipeline
 
+# Silence brainflow’s “serial port is empty” errors
+logging.getLogger("board_logger").setLevel(logging.WARNING)
+
 st.set_page_config(page_title="NeuroForge", layout="wide")
 st.title("🧠 NeuroForge: BCI Middleware Builder")
 
-tabs = st.tabs(["Spec", "Code", "Run"])
+tabs = st.tabs(["Spec", "Code", "Run", "Hardware", "API"])
 
 # --- Spec tab ---
 with tabs[0]:
@@ -40,39 +46,43 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Run Middleware on Synthetic Data")
     mode = st.radio("Select data type", ("EEG", "ECoG"))
-    if st.button("Run Pipeline with Synthetic Labels"):
-        # 1. Run the pipeline once to get raw data & times
-        with st.spinner("Running first pass pipeline…"):
-            first_pass = run_full_pipeline(
-                "hardware_profiles/openbci_cyton.yaml",
-                mode=mode,
-                labels=None  # no training yet
-            )
-        arr, times = first_pass["raw"]  # extract raw data and times
-        
-        # 2. Build alternating labels: 0 for [0–1)s, 1 for [1–2)s, etc.
-        labels = ((times // 1).astype(int) % 2)
-        
-        # 3. Rerun the pipeline with labels → returns a Decoder instance
-        with st.spinner("Running synthetic label pipeline…"):
-            result = run_full_pipeline(
-                "hardware_profiles/openbci_cyton.yaml",
-                mode=mode,
-                labels=labels
-            )
-        decoder = result["predictions"]
-        
-        # 4. Predict on the same features
-        feat_arr = np.vstack(list(result["features"].values())).T
-        preds    = decoder.predict(feat_arr)
-        
-        # 5. Display “True vs. Predicted” over time
+
+    if st.button("Run Pipeline with Synthetic Channel Labels"):
+        # 1. Grab raw to get channel count
+        with st.spinner("Running raw pipeline…"):
+            out0   = run_full_pipeline("hardware_profiles/openbci_cyton.yaml", mode=mode, labels=None)
+        arr, _ = out0["raw"]
+        st.write(f"DEBUG: arr.shape = {arr.shape}")
+
+        # 2. Create per‐channel labels
+        n_channels = arr.shape[0]
+        labels     = np.array([i % 2 for i in range(n_channels)])
+        st.write(f"DEBUG: labels.shape = {labels.shape}")
+
+        # 3. Run pipeline *with* labels
+        with st.spinner("Running pipeline with labels…"):
+            result = run_full_pipeline("hardware_profiles/openbci_cyton.yaml", mode=mode, labels=labels)
+        preds_or_model = result["predictions"]
+        feats         = result["features"]
+
+        # 4. Build feature matrix: one row per channel
+        feat_arr = np.vstack(list(feats.values())).T  # shape (n_channels, n_features)
+
+        # 5. Dispatch on what `predictions` gave us
+        if hasattr(preds_or_model, "predict"):
+            # it’s a Decoder
+            preds = preds_or_model.predict(feat_arr)
+        else:
+            # it’s already an array of predictions
+            preds = preds_or_model
+
+        # 6. Display per‐channel comparison
         df_cmp = pd.DataFrame({
-            "True Label":      labels,
-            "Predicted Label": preds
-        }, index=times)
-        st.subheader("True vs. Predicted Labels")
-        st.line_chart(df_cmp)
+            "True": labels,
+            "Pred": preds
+        }, index=[f"ch{i+1}" for i in range(n_channels)])
+        st.subheader("Per-Channel True vs. Predicted Labels")
+        st.dataframe(df_cmp)
 
     if st.button("Run Pipeline"):
         with st.spinner("Running pipeline…"):
@@ -142,3 +152,49 @@ with tabs[2]:
             st.write("Predictions:", preds)
 
         st.success("Pipeline complete!")
+
+# --- Hardware (SDK) Tab ---
+with tabs[3]:
+    st.header("SDK: BCI Client")
+    from middleware.sdk.sdk import BCIClient
+
+    client = BCIClient()
+    if st.button("Connect"):
+        try:
+            client.connect()
+            st.success("Connected to board")
+        except Exception as e:
+            st.error("Could not connect: {e}")
+            
+    if st.button("Start Stream"):
+        try:
+            client.start_stream(sampling_rate=250, packet_size=450)
+            st.info("Streaming...")
+        except Exception as e:
+            st.error("Stream failed to start: {e}")
+
+    if st.button("Stop Stream"):
+        try:
+            client.stop_stream()
+            st.info("Stopped streaming")
+        except Exception as e:
+            st.error("Stream is already stopped: {e}")
+
+    if st.button("Get Buffer Length"):
+        try:
+            buf = client.get_buffer()
+            st.write(f"Buffered shape: {buf.shape}")
+        except Exception as e:
+            st.error("Could not retrieve buffer: {e}")
+
+# --- API (Endpoint) Tab ---
+with tabs[4]:
+    st.header("Endpoint: /predict")
+    mode = st.selectbox("Mode", ["EEG","ECoG"])
+    if st.button("Call /predict"):
+        try:
+            resp = requests.post("http://localhost:8000/predict", json={"mode": mode})
+            resp.raise_for_status()
+            st.json(resp.json())
+        except Exception as e:
+            st.error(f"Request failed: {e}")

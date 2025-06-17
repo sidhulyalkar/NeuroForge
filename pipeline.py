@@ -1,5 +1,5 @@
 # pipeline.py
-
+import numpy as np
 from agents.spec_agent import SpecAgent
 from middleware.io.signal_shape import run as validate_shape
 from middleware.preprocessing.preprocessing import run as preprocess
@@ -7,6 +7,7 @@ from middleware.features.features import run as extract_features
 from middleware.decoding.decoding import run as decode
 from mock_data.eeg.generate_synthetic_eeg import generate_mock_eeg
 from mock_data.ecog.generate_synthetic_ecog import generate_synthetic_ecog
+from mock_data.ecog.generate_precision_ecog import generate_precision_ecog
 
 def run_full_pipeline(yaml_path, mode="EEG", labels=None):
     # 1. Load the hardware YAML directly
@@ -22,13 +23,14 @@ def run_full_pipeline(yaml_path, mode="EEG", labels=None):
         steps = hw_spec.get("preprocessing", [])
         fs    = hw_spec.get("sampling_rate", 250)
     else:
-        df    = generate_synthetic_ecog()
+        df, meta    = generate_precision_ecog()
         # For ECoG add CAR + high‐gamma on top of the YAML steps
         steps = hw_spec.get("preprocessing", []) + [
             {"car": True},
             {"highpass_filter": 70}
         ]
-        fs    = hw_spec.get("sampling_rate", 1000)
+        # Force ECoG sampling rate to 1000 Hz to match Precision Style Electrode Array
+        fs    = 1000 
 
     # 4. Validate & preprocess
     arr, times = validate_shape(df, expected_channels=df.shape[1]-1, expected_fs=fs)
@@ -52,7 +54,6 @@ def run_full_pipeline(yaml_path, mode="EEG", labels=None):
         preds_or_model = decode(feats, pipeline_spec.get("decoding", {}), labels=labels)
         # preds = decode(feats, hw_spec.get("decoding", {}))
     else:
-        import numpy as np
         preds = np.zeros(clean.shape[1], dtype=int)
 
     return {
