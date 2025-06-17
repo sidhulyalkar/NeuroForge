@@ -1,0 +1,20 @@
+name: openbci_cyton_pipeline
+input_channels: 8
+sampling_rate: 250
+preprocessing:
+  - notch_filter: 60
+  - bandpass_filter: [1, 40]
+  - zscore_normalization: true
+features:
+  - bandpower: [delta, theta, alpha, beta]
+  - signal_entropy
+decoding:
+  model: RandomForestClassifier
+  task: binary_classification
+sdk:
+  language: python
+  endpoints:
+    - /connect
+    - /start_stream
+    - /get_features
+    - /predict
