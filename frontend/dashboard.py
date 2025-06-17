@@ -3,6 +3,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 from agents.spec_agent import SpecAgent
 from agents.code_agent import CodeAgent
 from pipeline import run_full_pipeline
@@ -39,6 +40,40 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Run Middleware on Synthetic Data")
     mode = st.radio("Select data type", ("EEG", "ECoG"))
+    if st.button("Run Pipeline with Synthetic Labels"):
+        # 1. Run the pipeline once to get raw data & times
+        with st.spinner("Running first pass pipeline…"):
+            first_pass = run_full_pipeline(
+                "hardware_profiles/openbci_cyton.yaml",
+                mode=mode,
+                labels=None  # no training yet
+            )
+        arr, times = first_pass["raw"]  # extract raw data and times
+        
+        # 2. Build alternating labels: 0 for [0–1)s, 1 for [1–2)s, etc.
+        labels = ((times // 1).astype(int) % 2)
+        
+        # 3. Rerun the pipeline with labels → returns a Decoder instance
+        with st.spinner("Running synthetic label pipeline…"):
+            result = run_full_pipeline(
+                "hardware_profiles/openbci_cyton.yaml",
+                mode=mode,
+                labels=labels
+            )
+        decoder = result["predictions"]
+        
+        # 4. Predict on the same features
+        feat_arr = np.vstack(list(result["features"].values())).T
+        preds    = decoder.predict(feat_arr)
+        
+        # 5. Display “True vs. Predicted” over time
+        df_cmp = pd.DataFrame({
+            "True Label":      labels,
+            "Predicted Label": preds
+        }, index=times)
+        st.subheader("True vs. Predicted Labels")
+        st.line_chart(df_cmp)
+
     if st.button("Run Pipeline"):
         with st.spinner("Running pipeline…"):
             result = run_full_pipeline(
@@ -46,6 +81,13 @@ with tabs[2]:
                 mode=mode
             )
         arr, times = result["raw"]
+        # Suppose `times` is the Time vector from raw data:
+        arr, times = result["raw"]
+        n = len(times)
+        # Create a label for every sample: 0 for first half, 1 for second half
+        # or alternate every second:
+        state = (times // 1).astype(int) % 2  # 0/1 alternating each second
+
         clean = result["clean"]
 
         # Build DataFrames indexed by time
@@ -66,6 +108,25 @@ with tabs[2]:
         # 4. Feature extraction
         with st.expander("Feature Extraction"):
             feat_dict = result["features"]
+            # Map numeric band names back to standard labels
+            band_label_map = {
+                "band_1_4":   "delta (1-4Hz)",
+                "band_4_8":   "theta (4-8Hz)",
+                "band_8_12":  "alpha (8-12Hz)",
+                "band_12_30": "beta (12-30Hz)",
+                "band_70_150":"high-gamma (70-150Hz)",
+            }
+            # Build a new dict with renamed keys
+            readable_bp = {
+                band_label_map.get(k, k): v
+                for k, v in feat_dict.items()
+                if k.startswith("band_")
+            }
+
+            if readable_bp:
+                means = {label: float(v.mean()) for label, v in readable_bp.items()}
+                st.bar_chart(means)
+
             # Display first few feature values as table
             st.dataframe({k: v[:5] for k, v in feat_dict.items()})
 

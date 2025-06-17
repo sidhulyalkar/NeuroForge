@@ -8,7 +8,7 @@ from middleware.decoding.decoding import run as decode
 from mock_data.eeg.generate_synthetic_eeg import generate_mock_eeg
 from mock_data.ecog.generate_synthetic_ecog import generate_synthetic_ecog
 
-def run_full_pipeline(yaml_path, mode="EEG"):
+def run_full_pipeline(yaml_path, mode="EEG", labels=None):
     # 1. Load the hardware YAML directly
     spec_agent = SpecAgent(model_name="gpt-4", temperature=0.0)
     hw_spec = spec_agent.load_spec(yaml_path)
@@ -47,7 +47,10 @@ def run_full_pipeline(yaml_path, mode="EEG"):
 
     # Decode or default if no features
     if feats:
-        preds = decode(feats, hw_spec.get("decoding", {}))
+        labels = np.tile([0,1], clean.shape[1]//2 + 1)[: clean.shape[1]]
+        # decoder = decode(feats, hw_spec.get("decoding", {}), labels=labels)
+        preds_or_model = decode(feats, pipeline_spec.get("decoding", {}), labels=labels)
+        # preds = decode(feats, hw_spec.get("decoding", {}))
     else:
         import numpy as np
         preds = np.zeros(clean.shape[1], dtype=int)
@@ -58,7 +61,7 @@ def run_full_pipeline(yaml_path, mode="EEG"):
         "raw":         (arr, times),
         "clean":       clean,
         "features":    feats,
-        "predictions": preds
+        "predictions": preds_or_model
     }
 
 if __name__ == "__main__":
