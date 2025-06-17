@@ -1,6 +1,13 @@
 import numpy as np
 from scipy.signal import welch
 
+BAND_MAP = {
+    "delta": (1, 4),
+    "theta": (4, 8),
+    "alpha": (8, 12),
+    "beta":  (12, 30),
+}
+
 def compute_bandpower(data: np.ndarray, fs: float, bands: list) -> dict:
     """
     Compute bandpower for each channel over specified frequency bands.
@@ -18,10 +25,18 @@ def compute_bandpower(data: np.ndarray, fs: float, bands: list) -> dict:
     dict
         Keys like 'band_1_4' → ndarray of length channels.
     """
+    # allow names or numeric
+    numeric_bands = []
+    for band in bands:
+        if isinstance(band, str):
+            numeric_bands.append(BAND_MAP[band])
+        else:
+            numeric_bands.append(band)
+    
     # Estimate PSD with Welch's method
     freqs, psd = welch(data, fs=fs, axis=1, nperseg=min(data.shape[1], fs*2))
     bp = {}
-    for low, high in bands:
+    for low, high in numeric_bands:
         mask = (freqs >= low) & (freqs <= high)
         # integrate PSD under the curve for each channel
         power = np.trapz(psd[:, mask], freqs[mask], axis=1)
