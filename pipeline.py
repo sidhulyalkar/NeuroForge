@@ -12,8 +12,6 @@ def run_full_pipeline(yaml_path, mode="EEG"):
     # 1. Load the hardware YAML directly
     spec_agent = SpecAgent(model_name="gpt-4", temperature=0.0)
     hw_spec = spec_agent.load_spec(yaml_path)
-    print("DEBUG: hw_spec =", hw_spec)
-    print("DEBUG: yaml_path =", yaml_path)
 
     # 2. Also get the LLM‐generated pipeline spec if you need it later
     pipeline_spec = spec_agent.generate_pipeline_spec(hw_spec)
