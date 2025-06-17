@@ -24,6 +24,7 @@ def run_full_pipeline(yaml_path, mode="EEG", labels=None):
         fs    = hw_spec.get("sampling_rate", 250)
     else:
         df, meta    = generate_precision_ecog()
+        print(f"DEBUG: df shape = {df.shape}")
         # For ECoG add CAR + high‐gamma on top of the YAML steps
         steps = hw_spec.get("preprocessing", []) + [
             {"car": True},
@@ -62,7 +63,8 @@ def run_full_pipeline(yaml_path, mode="EEG", labels=None):
         "raw":         (arr, times),
         "clean":       clean,
         "features":    feats,
-        "predictions": preds_or_model
+        "predictions": preds_or_model,
+        "metadata":    meta
     }
 
 if __name__ == "__main__":
