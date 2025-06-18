@@ -6,6 +6,10 @@ import pandas as pd
 import numpy as np
 import requests
 import logging
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import plotly.graph_objects as go
+import plotly.express as px
 
 from agents.spec_agent import SpecAgent
 from agents.code_agent import CodeAgent
@@ -114,6 +118,101 @@ with tabs[2]:
 
         st.subheader("Cleaned Signals (first 3 channels)")
         st.line_chart(clean_df)
+
+        if mode == "ECoG":
+            # === unpack what pipeline returned ===
+            df_raw, times = result["raw"]
+            clean         = result["clean"]
+            meta          = result["metadata"]
+
+            # # Quick sanity check
+            # st.write(f"DEBUG: clean.shape = {clean.shape}, meta.shape = {meta.shape}")
+            # st.write("⚙️ DEBUG result keys:", list(result.keys()))
+            # st.write("⚙️ DEBUG meta.shape:", None if meta is None else meta.shape)
+            # st.write("⚙️ DEBUG meta.head():", None if meta is None else meta.head())
+
+
+            # 1) 2D Scatter of Electrode Layout
+            st.subheader("ECoG Electrode Layout (Matplotlib)")
+
+            x_mm    = meta["x_m"].values * 1e3
+            y_mm    = meta["y_m"].values * 1e3
+            diam_um = meta["diameter_m"].values * 1e6
+
+            fig1, ax1 = plt.subplots(figsize=(6,6))
+            sc = ax1.scatter(
+                x_mm, y_mm,
+                s=(diam_um / diam_um.max() * 200) + 5,
+                c=diam_um,
+                cmap="turbo",
+                alpha=0.7,
+                edgecolors="k",
+            )
+            fig1.colorbar(sc, ax=ax1, label="Electrode Ø (µm)")
+            ax1.set_xlabel("X (mm)")
+            ax1.set_ylabel("Y (mm)")
+            ax1.set_title("32×32 ECoG Grid (400 µm spacing)")
+            ax1.set_aspect("equal", "box")
+            st.pyplot(fig1)
+
+            # 2) Heatmap of Mean RMS
+            st.subheader("Mean RMS Topography (Matplotlib)")
+
+            n_chan, _ = clean.shape
+            window = 100
+            rms = (clean.reshape(n_chan, -1, window)**2).mean(axis=2)**0.5
+            mean_rms = rms.mean(axis=1)
+
+            grid = int(np.sqrt(n_chan))
+            topo = mean_rms.reshape(grid, grid)
+
+            fig2, ax2 = plt.subplots(figsize=(6,5))
+            im = ax2.imshow(topo, origin="lower", cmap="viridis",
+                            extent=[0, grid*0.4, 0, grid*0.4])
+            fig2.colorbar(im, ax=ax2, label="RMS amplitude")
+            ax2.set_xlabel("X (mm)")
+            ax2.set_ylabel("Y (mm)")
+            ax2.set_title("Mean RMS on 32×32 Grid")
+            st.pyplot(fig2)
+
+            # 3) Static 3D Scatter on Hemisphere
+            st.subheader("3D ECoG Positions (Matplotlib)")
+
+            fig3 = plt.figure(figsize=(6,6))
+            ax3 = fig3.add_subplot(111, projection='3d')
+
+            # hemisphere
+            cx, cy = x_mm.mean(), y_mm.mean()
+            radius = max(np.hypot(x_mm-cx, y_mm-cy)) * 1.1
+            u = np.linspace(0, 2*np.pi, 60)
+            v = np.linspace(0, np.pi/2, 30)
+            uu, vv = np.meshgrid(u, v)
+            X = radius*np.cos(uu)*np.sin(vv)
+            Y = radius*np.sin(uu)*np.sin(vv)
+            Z = radius*np.cos(vv)
+            ax3.plot_surface(X, Y, Z, rstride=2, cstride=2, alpha=0.3, color="lightgray", linewidth=0)
+
+            # electrodes
+            ax3.scatter(
+                x_mm-cx, y_mm-cy, np.ones_like(x_mm)*2,
+                s=10, c=diam_um, cmap="turbo"
+            )
+            ax3.set_axis_off()
+            ax3.set_title("ECoG Array on Approximate Cortex")
+            st.pyplot(fig3)
+
+
+        # Compute correlation matrix: shape (channels, channels)
+        corr = np.corrcoef(clean)
+
+
+        fig, ax = plt.subplots(figsize=(6,6))
+        cax = ax.matshow(corr, vmin=-1, vmax=1)
+        fig.colorbar(cax, ax=ax)
+        ax.set_title("Channel×Channel Correlation")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        st.pyplot(fig)
 
         # 4. Feature extraction
         with st.expander("Feature Extraction"):

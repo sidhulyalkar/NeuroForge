@@ -22,6 +22,7 @@ def run_full_pipeline(yaml_path, mode="EEG", labels=None):
         df    = generate_mock_eeg()
         steps = hw_spec.get("preprocessing", [])
         fs    = hw_spec.get("sampling_rate", 250)
+        meta = []
     else:
         df, meta    = generate_precision_ecog()
         print(f"DEBUG: df shape = {df.shape}")
