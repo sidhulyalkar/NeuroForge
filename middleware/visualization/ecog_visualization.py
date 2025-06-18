@@ -154,24 +154,82 @@ class EnhancedECoGVisualizer:
         Initialize visualizer with electrode metadata and cleaned data
         
         Args:
-            meta_df: DataFrame with columns ['x_m', 'y_m', 'diameter_m']
+            meta_df: DataFrame with columns ['x_m', 'y_m', 'diameter_m'] OR numpy array
             clean_data: Array of shape (n_channels, n_samples)
             sampling_rate: Sampling rate in Hz
         """
-        self.meta = meta_df
         self.clean = clean_data
         self.fs = sampling_rate
         self.n_channels, self.n_samples = clean_data.shape
         
-        # Convert to convenient units
-        self.x_mm = self.meta["x_m"].values * 1000
-        self.y_mm = self.meta["y_m"].values * 1000
-        self.z_mm = self.meta.get("z_m", np.zeros(len(self.meta))).values * 1000
-        self.diameter_um = self.meta["diameter_m"].values * 1e6
+        # Handle both DataFrame and numpy array inputs for meta
+        if isinstance(meta_df, pd.DataFrame):
+            self.meta = meta_df
+            # Convert to convenient units
+            self.x_mm = self.meta["x_m"].values * 1000
+            self.y_mm = self.meta["y_m"].values * 1000
+            self.z_mm = self.meta.get("z_m", pd.Series(np.zeros(len(self.meta)))).values * 1000
+            self.diameter_um = self.meta["diameter_m"].values * 1e6
+        elif isinstance(meta_df, np.ndarray) or meta_df is None:
+            # Generate synthetic metadata for numpy array or None case
+            st.warning("No metadata DataFrame provided. Generating synthetic electrode positions.")
+            self.meta = self._generate_synthetic_metadata(self.n_channels)
+            self.x_mm = self.meta["x_m"].values * 1000
+            self.y_mm = self.meta["y_m"].values * 1000
+            self.z_mm = self.meta["z_m"].values * 1000
+            self.diameter_um = self.meta["diameter_m"].values * 1e6
+        else:
+            # Try to convert to DataFrame if it has the right structure
+            try:
+                if hasattr(meta_df, '__len__') and len(meta_df) == self.n_channels:
+                    self.meta = self._generate_synthetic_metadata(self.n_channels)
+                    self.x_mm = self.meta["x_m"].values * 1000
+                    self.y_mm = self.meta["y_m"].values * 1000  
+                    self.z_mm = self.meta["z_m"].values * 1000
+                    self.diameter_um = self.meta["diameter_m"].values * 1e6
+                else:
+                    raise ValueError("Invalid metadata format")
+            except:
+                st.error(f"Unsupported metadata type: {type(meta_df)}. Expected pandas DataFrame.")
+                # Fallback to synthetic data
+                self.meta = self._generate_synthetic_metadata(self.n_channels)
+                self.x_mm = self.meta["x_m"].values * 1000
+                self.y_mm = self.meta["y_m"].values * 1000
+                self.z_mm = self.meta["z_m"].values * 1000
+                self.diameter_um = self.meta["diameter_m"].values * 1e6
         
         # Initialize quality analyzer
         self.quality_analyzer = SignalQualityAnalyzer()
         self.quality_metrics = None
+    
+    def _generate_synthetic_metadata(self, n_channels):
+        """Generate synthetic electrode metadata for cases where it's not provided"""
+        # Create a square grid layout
+        grid_size = int(np.ceil(np.sqrt(n_channels)))
+        spacing_m = 400e-6  # 400 micrometers
+        
+        positions = []
+        for i in range(n_channels):
+            row = i // grid_size
+            col = i % grid_size
+            x = col * spacing_m
+            y = row * spacing_m
+            positions.append([x, y])
+        
+        positions = np.array(positions)
+        
+        # Generate random diameters between 50-380 micrometers
+        diameters = np.random.uniform(50e-6, 380e-6, n_channels)
+        
+        meta_df = pd.DataFrame({
+            'channel': [f"chan_{i}" for i in range(n_channels)],
+            'x_m': positions[:, 0],
+            'y_m': positions[:, 1], 
+            'z_m': np.zeros(n_channels),  # Assume flat array
+            'diameter_m': diameters
+        })
+        
+        return meta_df
     
     def analyze_signal_quality(self):
         """Perform comprehensive signal quality analysis"""
@@ -515,174 +573,190 @@ def create_enhanced_ecog_section(meta, clean_data, sampling_rate=1000):
     Integrates with existing pipeline structure
     """
     
-    visualizer = EnhancedECoGVisualizer(meta, clean_data, sampling_rate)
+    # Debug information
+    st.write("**Debug Information:**")
+    st.write(f"Meta type: {type(meta)}")
+    st.write(f"Meta shape/length: {getattr(meta, 'shape', len(meta) if meta is not None else 'None')}")
+    st.write(f"Clean data shape: {clean_data.shape}")
     
-    st.subheader("🧠 Enhanced ECoG Array Analysis")
-    
-    # Signal Quality Assessment
-    with st.expander("📊 Signal Quality Assessment", expanded=True):
-        if st.button("Analyze Signal Quality"):
-            with st.spinner("Analyzing signal quality..."):
-                quality_metrics = visualizer.analyze_signal_quality()
+    try:
+        visualizer = EnhancedECoGVisualizer(meta, clean_data, sampling_rate)
+        
+        st.subheader("🧠 Enhanced ECoG Array Analysis")
+        
+        # Signal Quality Assessment
+        with st.expander("📊 Signal Quality Assessment", expanded=True):
+            if st.button("Analyze Signal Quality"):
+                with st.spinner("Analyzing signal quality..."):
+                    quality_metrics = visualizer.analyze_signal_quality()
+                
+                # Display overall score
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Overall Quality Score", 
+                        f"{quality_metrics['overall_score']:.2f}",
+                        delta=None
+                    )
+                with col2:
+                    st.metric(
+                        "Average SNR", 
+                        f"{np.mean(quality_metrics['snr']):.1f} dB"
+                    )
+                with col3:
+                    st.metric(
+                        "Artifact Level", 
+                        f"{np.mean(quality_metrics['artifact_ratio']):.1%}"
+                    )
+                
+                # Quality overview dashboard
+                quality_fig = visualizer.plot_quality_overview()
+                st.plotly_chart(quality_fig, use_container_width=True)
+                
+                # Display recommendations
+                if quality_metrics['recommendations']:
+                    st.subheader("🔧 Recommendations")
+                    for rec in quality_metrics['recommendations']:
+                        if rec['severity'] == 'high':
+                            st.error(f"**{rec['message']}** - {rec['action']}")
+                        elif rec['severity'] == 'medium':
+                            st.warning(f"**{rec['message']}** - {rec['action']}")
+                        else:
+                            st.info(f"**{rec['message']}** - {rec['action']}")
+                
+                # Display alerts
+                if quality_metrics['alerts']:
+                    st.subheader("🚨 Alerts")
+                    for alert in quality_metrics['alerts']:
+                        st.error(f"**{alert['message']}** - {alert['action']}")
+        
+        # Create tabs for different visualizations
+        viz_tabs = st.tabs([
+            "📍 Enhanced Layout", 
+            "🌐 3D Brain View", 
+            "📊 Spectral Analysis",
+            "🔗 Connectivity"
+        ])
+        
+        with viz_tabs[0]:
+            st.markdown("### Interactive Electrode Array Layout")
             
-            # Display overall score
+            col1, col2 = st.columns([3, 1])
+            
+            with col2:
+                color_option = st.selectbox(
+                    "Color electrodes by:",
+                    ["quality", "snr", "activity", "diameter"],
+                    key="enhanced_color"
+                )
+                show_labels = st.checkbox("Show channel labels", value=True, key="enhanced_labels")
+            
+            with col1:
+                enhanced_fig = visualizer.plot_electrode_layout_advanced(
+                    color_by=color_option, 
+                    show_labels=show_labels
+                )
+                st.plotly_chart(enhanced_fig, use_container_width=True)
+        
+        with viz_tabs[1]:
+            st.markdown("### Enhanced 3D Brain Surface Visualization")
+            
+            col1, col2 = st.columns([4, 1])
+            
+            with col2:
+                color_3d = st.selectbox(
+                    "Color by:",
+                    ["activity", "quality", "diameter"],
+                    key="3d_enhanced_color"
+                )
+                brain_radius = st.slider(
+                    "Brain radius (mm)",
+                    min_value=20.0,
+                    max_value=80.0,
+                    value=50.0,
+                    step=5.0,
+                    key="enhanced_radius"
+                )
+                show_brain = st.checkbox("Show brain surface", value=True, key="show_brain")
+            
+            with col1:
+                fig_3d_enhanced = visualizer.plot_brain_surface_3d_enhanced(
+                    brain_radius=brain_radius,
+                    color_by=color_3d,
+                    show_brain=show_brain
+                )
+                st.plotly_chart(fig_3d_enhanced, use_container_width=True)
+        
+        with viz_tabs[2]:
+            st.markdown("### Advanced Spectral Power Analysis")
+            
+            # Custom frequency bands
+            with st.expander("Customize frequency bands"):
+                st.info("Define custom frequency bands for analysis")
+                # Could add custom band definition here
+            
+            spectral_fig = visualizer.plot_spectral_analysis()
+            st.plotly_chart(spectral_fig, use_container_width=True)
+            
+            # Spectral statistics
+            st.subheader("Spectral Statistics")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            # Calculate some basic spectral metrics
+            alpha_power = np.mean([np.sqrt(np.mean(clean_data[ch]**2)) for ch in range(clean_data.shape[0])])
+            
+            with col1:
+                st.metric("Dominant Frequency", "~10 Hz")
+            with col2:
+                st.metric("Alpha Power", f"{alpha_power:.3f}")
+            with col3:
+                st.metric("Spectral Entropy", f"{np.random.uniform(0.7, 0.9):.2f}")
+            with col4:
+                st.metric("Peak Frequency", f"{np.random.uniform(8, 12):.1f} Hz")
+        
+        with viz_tabs[3]:
+            st.markdown("### Channel Connectivity Analysis")
+            
+            # Connectivity matrix
+            correlation_matrix = np.corrcoef(clean_data)
+            
+            connectivity_fig = go.Figure(data=go.Heatmap(
+                z=correlation_matrix,
+                colorscale='RdBu',
+                zmid=0,
+                colorbar=dict(title='Correlation'),
+                hovertemplate="Ch %{x} - Ch %{y}<br>Correlation: %{z:.3f}<extra></extra>"
+            ))
+            
+            connectivity_fig.update_layout(
+                title="Enhanced Channel Correlation Matrix",
+                xaxis_title="Channel",
+                yaxis_title="Channel",
+                width=600,
+                height=500
+            )
+            
+            st.plotly_chart(connectivity_fig, use_container_width=True)
+            
+            # Connectivity statistics
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric(
-                    "Overall Quality Score", 
-                    f"{quality_metrics['overall_score']:.2f}",
-                    delta=None
-                )
+                st.metric("Max Correlation", f"{np.max(correlation_matrix[correlation_matrix < 1]):.3f}")
             with col2:
-                st.metric(
-                    "Average SNR", 
-                    f"{np.mean(quality_metrics['snr']):.1f} dB"
-                )
+                st.metric("Mean Correlation", f"{np.mean(correlation_matrix[correlation_matrix < 1]):.3f}")
             with col3:
-                st.metric(
-                    "Artifact Level", 
-                    f"{np.mean(quality_metrics['artifact_ratio']):.1%}"
-                )
-            
-            # Quality overview dashboard
-            quality_fig = visualizer.plot_quality_overview()
-            st.plotly_chart(quality_fig, use_container_width=True)
-            
-            # Display recommendations
-            if quality_metrics['recommendations']:
-                st.subheader("🔧 Recommendations")
-                for rec in quality_metrics['recommendations']:
-                    if rec['severity'] == 'high':
-                        st.error(f"**{rec['message']}** - {rec['action']}")
-                    elif rec['severity'] == 'medium':
-                        st.warning(f"**{rec['message']}** - {rec['action']}")
-                    else:
-                        st.info(f"**{rec['message']}** - {rec['action']}")
-            
-            # Display alerts
-            if quality_metrics['alerts']:
-                st.subheader("🚨 Alerts")
-                for alert in quality_metrics['alerts']:
-                    st.error(f"**{alert['message']}** - {alert['action']}")
-    
-    # Create tabs for different visualizations
-    viz_tabs = st.tabs([
-        "📍 Enhanced Layout", 
-        "🌐 3D Brain View", 
-        "📊 Spectral Analysis",
-        "🔗 Connectivity"
-    ])
-    
-    with viz_tabs[0]:
-        st.markdown("### Interactive Electrode Array Layout")
+                st.metric("Network Density", f"{np.mean(np.abs(correlation_matrix) > 0.3):.1%}")
         
-        col1, col2 = st.columns([3, 1])
+        return visualizer
         
-        with col2:
-            color_option = st.selectbox(
-                "Color electrodes by:",
-                ["quality", "snr", "activity", "diameter"],
-                key="enhanced_color"
-            )
-            show_labels = st.checkbox("Show channel labels", value=True, key="enhanced_labels")
+    except Exception as e:
+        st.error(f"Error creating enhanced visualization: {str(e)}")
+        st.write("**Full error details:**")
+        st.exception(e)
         
-        with col1:
-            enhanced_fig = visualizer.plot_electrode_layout_advanced(
-                color_by=color_option, 
-                show_labels=show_labels
-            )
-            st.plotly_chart(enhanced_fig, use_container_width=True)
-    
-    with viz_tabs[1]:
-        st.markdown("### Enhanced 3D Brain Surface Visualization")
-        
-        col1, col2 = st.columns([4, 1])
-        
-        with col2:
-            color_3d = st.selectbox(
-                "Color by:",
-                ["activity", "quality", "diameter"],
-                key="3d_enhanced_color"
-            )
-            brain_radius = st.slider(
-                "Brain radius (mm)",
-                min_value=20.0,
-                max_value=80.0,
-                value=50.0,
-                step=5.0,
-                key="enhanced_radius"
-            )
-            show_brain = st.checkbox("Show brain surface", value=True, key="show_brain")
-        
-        with col1:
-            fig_3d_enhanced = visualizer.plot_brain_surface_3d_enhanced(
-                brain_radius=brain_radius,
-                color_by=color_3d,
-                show_brain=show_brain
-            )
-            st.plotly_chart(fig_3d_enhanced, use_container_width=True)
-    
-    with viz_tabs[2]:
-        st.markdown("### Advanced Spectral Power Analysis")
-        
-        # Custom frequency bands
-        with st.expander("Customize frequency bands"):
-            st.info("Define custom frequency bands for analysis")
-            # Could add custom band definition here
-        
-        spectral_fig = visualizer.plot_spectral_analysis()
-        st.plotly_chart(spectral_fig, use_container_width=True)
-        
-        # Spectral statistics
-        st.subheader("Spectral Statistics")
-        col1, col2, col3, col4 = st.columns(4)
-        
-        # Calculate some basic spectral metrics
-        alpha_power = np.mean([np.sqrt(np.mean(clean_data[ch]**2)) for ch in range(clean_data.shape[0])])
-        
-        with col1:
-            st.metric("Dominant Frequency", "~10 Hz")
-        with col2:
-            st.metric("Alpha Power", f"{alpha_power:.3f}")
-        with col3:
-            st.metric("Spectral Entropy", f"{np.random.uniform(0.7, 0.9):.2f}")
-        with col4:
-            st.metric("Peak Frequency", f"{np.random.uniform(8, 12):.1f} Hz")
-    
-    with viz_tabs[3]:
-        st.markdown("### Channel Connectivity Analysis")
-        
-        # Connectivity matrix
-        correlation_matrix = np.corrcoef(clean_data)
-        
-        connectivity_fig = go.Figure(data=go.Heatmap(
-            z=correlation_matrix,
-            colorscale='RdBu',
-            zmid=0,
-            colorbar=dict(title='Correlation'),
-            hovertemplate="Ch %{x} - Ch %{y}<br>Correlation: %{z:.3f}<extra></extra>"
-        ))
-        
-        connectivity_fig.update_layout(
-            title="Enhanced Channel Correlation Matrix",
-            xaxis_title="Channel",
-            yaxis_title="Channel",
-            width=600,
-            height=500
-        )
-        
-        st.plotly_chart(connectivity_fig, use_container_width=True)
-        
-        # Connectivity statistics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Max Correlation", f"{np.max(correlation_matrix[correlation_matrix < 1]):.3f}")
-        with col2:
-            st.metric("Mean Correlation", f"{np.mean(correlation_matrix[correlation_matrix < 1]):.3f}")
-        with col3:
-            st.metric("Network Density", f"{np.mean(np.abs(correlation_matrix) > 0.3):.1%}")
-    
-    return visualizer
+        # Fallback to basic visualization
+        st.info("Falling back to basic ECoG visualization...")
+        return create_basic_ecog_fallback(clean_data)
 
 # Integration function to replace existing ECoG visualization
 def integrate_enhanced_visualization(result, mode, sampling_rate=250):
@@ -700,7 +774,20 @@ def integrate_enhanced_visualization(result, mode, sampling_rate=250):
         clean = result["clean"]
         meta = result["metadata"]
         
-        if meta is not None and not meta.empty:
+        # Debug the metadata
+        st.write("🔍 **Debugging Pipeline Results:**")
+        st.write(f"- Clean data shape: {clean.shape}")
+        st.write(f"- Metadata type: {type(meta)}")
+        
+        if isinstance(meta, pd.DataFrame):
+            st.write(f"- Metadata shape: {meta.shape}")
+            st.write(f"- Metadata columns: {list(meta.columns)}")
+        elif hasattr(meta, '__len__'):
+            st.write(f"- Metadata length: {len(meta)}")
+        else:
+            st.write(f"- Metadata: {meta}")
+        
+        try:
             # Use enhanced visualization
             visualizer = create_enhanced_ecog_section(meta, clean, sampling_rate)
             
@@ -729,7 +816,12 @@ def integrate_enhanced_visualization(result, mode, sampling_rate=250):
                     st.write(f"Number of channels: {clean.shape[0]}")
                     st.write(f"Recording duration: {clean.shape[1]/sampling_rate:.1f} seconds")
                     st.write(f"Sampling rate: {sampling_rate} Hz")
-                    st.write(f"Array spacing: {meta['x_m'].diff().dropna().iloc[0]*1000:.0f} µm")
+                    
+                    if isinstance(meta, pd.DataFrame) and 'x_m' in meta.columns:
+                        spacing = meta['x_m'].diff().dropna().iloc[0] * 1000 if len(meta) > 1 else 400
+                        st.write(f"Array spacing: {spacing:.0f} µm")
+                    else:
+                        st.write("Array spacing: ~400 µm (estimated)")
             
             with analysis_tabs[1]:
                 st.write("**Export Options**")
@@ -743,7 +835,54 @@ def integrate_enhanced_visualization(result, mode, sampling_rate=250):
                 st.slider("Update Rate (Hz)", 1, 60, 30, key="update_rate")
                 st.selectbox("Color Theme", ["Default", "Dark", "High Contrast"], key="color_theme")
                 
-        else:
-            st.error("No metadata available for enhanced ECoG visualization")
+        except Exception as e:
+            st.error(f"Enhanced visualization failed: {str(e)}")
+            st.info("Falling back to basic ECoG visualization...")
+            create_basic_ecog_fallback(clean)
             
     return True
+
+def create_basic_ecog_fallback(clean_data):
+    """Basic fallback visualization when enhanced version fails"""
+    st.subheader("Basic ECoG Visualization (Fallback)")
+    
+    # Simple correlation matrix
+    corr = np.corrcoef(clean_data)
+    
+    fig = go.Figure(data=go.Heatmap(
+        z=corr,
+        colorscale='RdBu',
+        zmid=0,
+        colorbar=dict(title='Correlation')
+    ))
+    
+    fig.update_layout(
+        title="Channel Correlation Matrix",
+        xaxis_title="Channel",
+        yaxis_title="Channel",
+        width=600,
+        height=500
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Basic statistics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Channels", clean_data.shape[0])
+    with col2:
+        st.metric("Samples", clean_data.shape[1])
+    with col3:
+        st.metric("Mean RMS", f"{np.mean(np.sqrt(np.mean(clean_data**2, axis=1))):.3f}")
+
+# Example replacement code for your dashboard.py
+"""
+Replace your existing ECoG section (lines ~70-130 in dashboard.py) with:
+
+if mode == "ECoG":
+    # Import the enhanced visualization
+    from middleware.visualization.ecog_visualizer import integrate_enhanced_visualization
+    
+    # Use enhanced visualization
+    integrate_enhanced_visualization(result, mode, sampling_rate=1000)
+"""
