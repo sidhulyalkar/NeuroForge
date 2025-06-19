@@ -473,7 +473,7 @@ with tabs[3]:
     st.header("SDK: BCI Client")
     from middleware.sdk.sdk import BCIClient
 
-    client = BCIClient()
+    client = BCIClient(use_dummy=True)
     if st.button("Connect"):
         try:
             client.connect()

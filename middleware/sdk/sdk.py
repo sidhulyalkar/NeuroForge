@@ -24,28 +24,29 @@ class DummyBoard:
     def stop_stream(self): pass
     def release_session(self): pass
 class BCIClient:
-    def __init__(self, board_id=None, serial_port=None):
+    def __init__(self, board_id=None, serial_port=None, use_dummy: bool = False):
         """
-        Initialize BCIClient.  Always prepare:
-         - self.board (real BoardShim or DummyBoard)
-         - self._buffer as list
-         - self._stream_thread, self._keep_streaming flags
+        Initialize BCIClient.
+        If use_dummy=True, always use DummyBoard (no BrainFlow at all).
         """
+        self.use_dummy = use_dummy
+
         # Always have these attributes for streaming logic/tests:
         self._buffer = []
         self._stream_thread = None
         self._keep_streaming = False
 
-        # BrainFlow params (if available)
-        params = BrainFlowInputParams() if BrainFlowInputParams else None
+        # BrainFlow params (if available) unless dummy
+        params = None if use_dummy else (BrainFlowInputParams() if BrainFlowInputParams else None)
         if params and serial_port:
             params.serial_port = serial_port
 
-        # Real board or dummy
-        if BoardShim and params:
+        # pick DummyBoard if forced, else try BrainFlow then fallback
+        if use_dummy:
+            self.board = DummyBoard(board_id, params)
+        elif BoardShim and params:
             try:
-                bid = board_id or BoardIds.CYTON_BOARD.value
-                self.board = BoardShim(bid, params)
+                self.board = BoardShim(board_id or BoardIds.CYTON_BOARD.value, params)
             except Exception:
                 self.board = DummyBoard(board_id, params)
         else:
