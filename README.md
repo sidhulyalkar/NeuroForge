@@ -179,6 +179,17 @@ The UI is organized into **five tabs**:
 
 ---
 
+##💡 Use Cases & Value Proposition
+
+* **Streamlined BCI Development**: Automate pipeline creation from hardware spec to real‑time inference, reducing days of boilerplate.
+* **Rapid Prototyping**: Edit YAML, refresh the Spec tab, and iterate on new hardware and algorithm workflows in minutes.
+* **Device‑Agnostic Workflows**: Develop with simulated data, then switch to real hardware by setting use_dummy=False and specifying serial port.
+* **Interactive Insights**: Unified dashboard for hardware control, signal plots, heatmaps, and 2D/3D layouts—ideal for debugging and demos.
+* **Robust Testing**: Comprehensive pytest suite ensures reliability across I/O, preprocessing, features, decoding, SDK, realtime, and endpoint layers.
+* **Extensible Architecture**: Easily plug in new filters, custom feature extractors, ML models, or hardware profiles.
+
+
+
 ## 📊 Visualizations
 
 * **Time‑Series**: Raw & cleaned signals via `st.line_chart`.
