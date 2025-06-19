@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import math
 
+
 def generate_precision_ecog(
     channels: int = 1024,
     fs: int = 1000,
@@ -24,9 +25,11 @@ def generate_precision_ecog(
       df      : DataFrame with columns ['time','chan_0',…,'chan_1023']
       meta    : DataFrame with metadata: x,y (meters) and diameter (meters)
     """
-    assert int(math.sqrt(channels))**2 == channels, "channels must be a perfect square"
+    assert (
+        int(math.sqrt(channels)) ** 2 == channels
+    ), "channels must be a perfect square"
     grid_size = int(math.sqrt(channels))
-    
+
     # Generate electrode positions (in meters)
     spacing_m = electrode_spacing_um * 1e-6
     xs = np.arange(grid_size) * spacing_m
@@ -35,17 +38,17 @@ def generate_precision_ecog(
     positions = np.vstack([xx.ravel(), yy.ravel()]).T  # shape (1024,2)
 
     # Random diameters in meters
-    diameters = np.random.uniform(diameter_range_um[0]*1e-6,
-                                  diameter_range_um[1]*1e-6,
-                                  size=channels)
+    diameters = np.random.uniform(
+        diameter_range_um[0] * 1e-6, diameter_range_um[1] * 1e-6, size=channels
+    )
 
     # Time vector
-    t = np.linspace(0, duration, int(fs*duration), endpoint=False)
+    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
     data = np.zeros((channels, len(t)))
 
     # Low-frequency background rhythms per channel (random phase)
     for ch in range(channels):
-        phase = np.random.rand() * 2*np.pi
+        phase = np.random.rand() * 2 * np.pi
         for f in low_freqs:
             data[ch] += np.sin(2 * np.pi * f * t + phase)
 
@@ -56,8 +59,10 @@ def generate_precision_ecog(
         bursts = np.random.choice(len(t), size=5, replace=False)
         for b in bursts:
             start = b
-            end = min(b + fs//10, len(t))
-            gamma = np.sin(2 * np.pi * np.random.uniform(*high_gamma_band) * t[start:end])
+            end = min(b + fs // 10, len(t))
+            gamma = np.sin(
+                2 * np.pi * np.random.uniform(*high_gamma_band) * t[start:end]
+            )
             data[ch, start:end] += gamma
 
     # Add Gaussian noise
@@ -68,19 +73,21 @@ def generate_precision_ecog(
     data_car = data - mean_sig
 
     # Build DataFrame
-    df = pd.DataFrame(data_car.T,
-                      columns=[f"chan_{i}" for i in range(channels)])
+    df = pd.DataFrame(data_car.T, columns=[f"chan_{i}" for i in range(channels)])
     df.insert(0, "time", t)
 
     # Metadata DataFrame
-    meta = pd.DataFrame({
-        "channel": [f"chan_{i}" for i in range(channels)],
-        "x_m": positions[:,0],
-        "y_m": positions[:,1],
-        "diameter_m": diameters
-    })
+    meta = pd.DataFrame(
+        {
+            "channel": [f"chan_{i}" for i in range(channels)],
+            "x_m": positions[:, 0],
+            "y_m": positions[:, 1],
+            "diameter_m": diameters,
+        }
+    )
 
     return df, meta
+
 
 if __name__ == "__main__":
     df_ecog, meta_ecog = generate_precision_ecog()

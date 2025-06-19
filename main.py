@@ -1,5 +1,6 @@
 import json
 from agents.spec_agent import SpecAgent
+
 if __name__ == "__main__":
     # Default to OpenBCI Cyton spec; change or add CLI parsing as needed
     yaml_file = "hardware_profiles/openbci_cyton.yaml"

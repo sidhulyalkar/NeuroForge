@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+
 def run(data, expected_channels=None, expected_fs=None):
     """
     Validate the shape (and optionally sampling rate) of the input signal.
@@ -34,9 +35,9 @@ def run(data, expected_channels=None, expected_fs=None):
 
     # Extract array and time vector
     if isinstance(data, pd.DataFrame):
-        if 'time' in data.columns:
-            times = data['time'].values
-            arr = data.drop(columns=['time']).values.T
+        if "time" in data.columns:
+            times = data["time"].values
+            arr = data.drop(columns=["time"]).values.T
         else:
             arr = data.values.T
     elif isinstance(data, np.ndarray):

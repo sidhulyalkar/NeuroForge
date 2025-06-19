@@ -4,6 +4,7 @@ import json
 import openai
 from openai import OpenAI
 
+
 class CodeAgent:
     def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0):
         """
@@ -25,11 +26,11 @@ class CodeAgent:
                 f"# {layer} module stub\n"
                 f"# Based on spec: {json.dumps(spec)}\n\n"
                 "def run(data):\n"
-                "    \"\"\"\n"
+                '    """\n'
                 f"    {layer.capitalize()} step for BCI middleware.\n"
                 "    Input: data (NumPy array or DataFrame)\n"
                 "    Output: processed data\n"
-                "    \"\"\"\n"
+                '    """\n'
                 "    # TODO: implement this\n"
                 "    pass\n"
             )

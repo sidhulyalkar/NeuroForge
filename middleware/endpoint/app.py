@@ -14,6 +14,7 @@ from middleware.decoding.decoding import run as decode
 # Shared ML client instance
 client = BCIClient()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
             f"BCIClient.disconnect() failed at shutdown: {e}"
         )
 
+
 # Create the FastAPI app with our lifespan manager
 app = FastAPI(lifespan=lifespan)
 
@@ -53,12 +55,21 @@ async def predict(req: PredictRequest):
     # Choose sampling rate and preprocessing steps based on mode
     if req.mode.upper() == "EEG":
         fs = 250
-        steps = [{"notch_filter": 60}, {"bandpass_filter": [1, 40]}, {"zscore_normalization": True}]
+        steps = [
+            {"notch_filter": 60},
+            {"bandpass_filter": [1, 40]},
+            {"zscore_normalization": True},
+        ]
     else:
         fs = 1000
-        steps = [{"notch_filter": 60}, {"bandpass_filter": [1, 40]},
-                 {"zscore_normalization": True}, {"car": True}, {"highpass_filter": 70}]
-    
+        steps = [
+            {"notch_filter": 60},
+            {"bandpass_filter": [1, 40]},
+            {"zscore_normalization": True},
+            {"car": True},
+            {"highpass_filter": 70},
+        ]
+
     # 1) Acquire data from the board buffer
     raw = client.get_buffer()  # shape: (channels, samples)
     if raw.size == 0 or raw.shape[1] == 0:
@@ -66,14 +77,15 @@ async def predict(req: PredictRequest):
 
     # 2) Preprocess
     clean = preprocess(raw, fs, steps)
-    
+
     # 3) Feature extraction
-    feats = extract_features(clean, fs, [
-        {"bandpower": [[1,4],[4,8],[8,12],[12,30]]},
-        {"signal_entropy": True}
-    ])
-    
+    feats = extract_features(
+        clean,
+        fs,
+        [{"bandpower": [[1, 4], [4, 8], [8, 12], [12, 30]]}, {"signal_entropy": True}],
+    )
+
     # 4) Decode (inference only)
     preds = decode(feats, {"model": "RandomForestClassifier"})
-    
+
     return {"predictions": preds.tolist()}

@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
 
+
 def generate_synthetic_ecog(
     channels=32,
     fs=1000,
     duration=10,
     low_freqs=[10, 20, 40],
     high_gamma_band=(70, 150),
-    noise_level=0.2
+    noise_level=0.2,
 ):
     """
     Simulate ECoG data:
@@ -23,12 +24,12 @@ def generate_synthetic_ecog(
             data[idx] += np.sin(2 * np.pi * f * t)
 
     # Add high-gamma bursts on random channels
-    for idx in np.random.choice(channels, size=channels//4, replace=False):
+    for idx in np.random.choice(channels, size=channels // 4, replace=False):
         # random burst times
         bursts = np.random.choice(len(t), size=5, replace=False)
         for b in bursts:
             start = b
-            end = min(b + fs//10, len(t))
+            end = min(b + fs // 10, len(t))
             gamma = np.sin(
                 2 * np.pi * np.random.uniform(*high_gamma_band) * t[start:end]
             )
@@ -42,10 +43,10 @@ def generate_synthetic_ecog(
     data_car = data - mean_signal
 
     # Package into DataFrame
-    df = pd.DataFrame(data_car.T,
-                      columns=[f"chan_{i+1}" for i in range(channels)])
+    df = pd.DataFrame(data_car.T, columns=[f"chan_{i+1}" for i in range(channels)])
     df.insert(0, "time", t)
     return df
+
 
 if __name__ == "__main__":
     df_ecog = generate_synthetic_ecog()

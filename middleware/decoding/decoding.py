@@ -3,6 +3,7 @@
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
+
 class Decoder:
     def __init__(self, model_name: str = "RandomForestClassifier", **kwargs):
         if model_name == "RandomForestClassifier":
@@ -15,6 +16,7 @@ class Decoder:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return self.model.predict(X)
+
 
 # def run(features_dict: dict, decoding_spec: dict, labels: np.ndarray = None):
 #     """
@@ -51,6 +53,7 @@ class Decoder:
 #         # inference‐only fallback
 #         return np.zeros(X.shape[0], dtype=int)
 
+
 def run(features_dict: dict, decoding_spec: dict, labels=None):
     """
     Train or run inference on a decoding model.
@@ -62,17 +65,19 @@ def run(features_dict: dict, decoding_spec: dict, labels=None):
     """
     feat_names = list(features_dict.keys())
     arrs = [features_dict[name] for name in feat_names]
-    
+
     # If no features, immediately fallback
     if len(arrs) == 0:
         return np.zeros(1 if labels is None else len(labels), dtype=int)
-    
+
     X = np.vstack(arrs).T  # shape (n_samples, n_features)
     n_samples = X.shape[0]
 
     # If valid labels, train
     if labels is not None and len(labels) == n_samples:
-        decoder = Decoder(model_name=decoding_spec.get("model", "RandomForestClassifier"))
+        decoder = Decoder(
+            model_name=decoding_spec.get("model", "RandomForestClassifier")
+        )
         decoder.fit(X, labels)
         return decoder
 

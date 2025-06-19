@@ -6,12 +6,14 @@ from middleware.endpoint.app import app
 
 client = TestClient(app)
 
+
 def test_predict_default():
     resp = client.post("/predict", json={"mode": "EEG"})
     assert resp.status_code == 200
     data = resp.json()
     assert "predictions" in data
     assert isinstance(data["predictions"], list)
+
 
 def test_predict_invalid_mode():
     resp = client.post("/predict", json={"mode": "INVALID"})

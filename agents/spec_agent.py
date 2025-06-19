@@ -6,6 +6,7 @@ import json
 import openai
 from openai import OpenAI
 
+
 class SpecAgent:
     def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0):
         """
@@ -18,7 +19,7 @@ class SpecAgent:
         self.temperature = temperature
 
     def load_spec(self, yaml_file: str) -> dict:
-        with open(yaml_file, 'r') as f:
+        with open(yaml_file, "r") as f:
             return yaml.safe_load(f)
 
     def generate_pipeline_spec(self, spec_data: dict) -> dict:
@@ -29,7 +30,7 @@ class SpecAgent:
                 "You are an expert system designing a BCI signal processing pipeline. "
                 "Given a hardware specification, output a JSON dictionary with keys: "
                 "signal_shape, preprocessing, features, decoding, sdk, endpoint."
-            )
+            ),
         }
         user_msg = {
             "role": "user",
@@ -37,7 +38,7 @@ class SpecAgent:
                 "Hardware spec:\n```json\n"
                 + json.dumps(spec_data, indent=2)
                 + "\n```\nGenerate pipeline spec JSON."
-            )
+            ),
         }
 
         resp = self.client.chat.completions.create(
@@ -53,7 +54,7 @@ class SpecAgent:
         except json.JSONDecodeError:
             start = text.find("{")
             end = text.rfind("}")
-            snippet = text[start:end+1]
+            snippet = text[start : end + 1]
             return json.loads(snippet)
 
     def run(self, yaml_file: str) -> dict:

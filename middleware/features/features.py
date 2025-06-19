@@ -5,8 +5,9 @@ BAND_MAP = {
     "delta": (1, 4),
     "theta": (4, 8),
     "alpha": (8, 12),
-    "beta":  (12, 30),
+    "beta": (12, 30),
 }
+
 
 def compute_bandpower(data: np.ndarray, fs: float, bands: list) -> dict:
     """
@@ -32,9 +33,9 @@ def compute_bandpower(data: np.ndarray, fs: float, bands: list) -> dict:
             numeric_bands.append(BAND_MAP[band])
         else:
             numeric_bands.append(band)
-    
+
     # Estimate PSD with Welch's method
-    freqs, psd = welch(data, fs=fs, axis=1, nperseg=min(data.shape[1], fs*2))
+    freqs, psd = welch(data, fs=fs, axis=1, nperseg=min(data.shape[1], fs * 2))
     bp = {}
     for low, high in numeric_bands:
         mask = (freqs >= low) & (freqs <= high)
@@ -42,6 +43,7 @@ def compute_bandpower(data: np.ndarray, fs: float, bands: list) -> dict:
         power = np.trapz(psd[:, mask], freqs[mask], axis=1)
         bp[f"band_{low}_{high}"] = power
     return bp
+
 
 def compute_entropy(data: np.ndarray, bins: int = 100) -> np.ndarray:
     """
@@ -64,6 +66,7 @@ def compute_entropy(data: np.ndarray, bins: int = 100) -> np.ndarray:
         ent = -np.sum(p * np.log2(p))
         entropies.append(ent)
     return np.array(entropies)
+
 
 def run(data: np.ndarray, fs: float, features: list) -> dict:
     """
