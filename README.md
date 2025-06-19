@@ -52,7 +52,7 @@ NeuroForge/
 1. **Clone the repo**
 
    ```bash
-   git clone https://github.com/your-org/NeuroForge.git
+   git clone https://github.com/sidhulyalkar/NeuroForge.git
    cd NeuroForge
    ```
 
