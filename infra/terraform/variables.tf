@@ -11,6 +11,7 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
+# Default to avoid prompt during partial plans
 variable "sagemaker_image" {
   description = "ECR URI or public image URI for SageMaker training"
   type        = string
