@@ -1,9 +1,5 @@
 # .github/workflows/ci.yml
-# Using GitHub Actions built-in coverage reporting (free alternative).
-env:
-  AWS_REGION: us-west-2
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CI Pipeline
 
 on:
@@ -15,20 +11,28 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
+    # Map your GitHub secrets into job-level env vars
+    env:
+      AWS_REGION:     us-west-2
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      CODEBUILD_ROLE: ${{ secrets.CODEBUILD_ROLE }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
     permissions:
       contents: read
       id-token: write
 
     steps:
       - name: Validate required secrets
+        shell: bash
         run: |
           for var in AWS_ACCOUNT_ID CODEBUILD_ROLE ECR_REPOSITORY; do
-            if [ -z "${{ secrets["$var"] }}" ]; then
-              echo "Error: secret $var is not set"
+            if [ -z "${!var}" ]; then
+              echo "❌ Error: $var is not set"
               exit 1
             fi
           done
-        shell: bash
 
       - name: Checkout code
         uses: actions/checkout@v3
@@ -36,19 +40,19 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.CODEBUILD_ROLE }}
+          aws-region:    ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.CODEBUILD_ROLE }}
 
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push Docker image
+      - name: Build, tag & push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          push:    true
+          tags:    ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -65,13 +69,13 @@ jobs:
           pip install flake8
           flake8 neuroforge/
 
-      - name: Run tests and collect coverage
+      - name: Run tests & collect coverage
         run: |
           pip install pytest coverage
           coverage run -m pytest tests/
           coverage xml -i
 
-      - name: Upload coverage report artifact
+      - name: Upload coverage report
         uses: actions/upload-artifact@v3
         with:
           name: coverage-report
