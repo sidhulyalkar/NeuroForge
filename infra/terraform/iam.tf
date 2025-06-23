@@ -37,7 +37,6 @@ data "aws_iam_policy_document" "codebuild_ecr_s3" {
     ]
     resources = [aws_ecr_repository.neuroforge.arn]
   }
-
   statement {
     effect  = "Allow"
     actions = ["s3:GetObject", "s3:PutObject"]
@@ -65,13 +64,8 @@ data "aws_iam_policy_document" "sagemaker_assume" {
     effect    = "Allow"
     actions   = ["sts:AssumeRole"]
     principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.project_prefix}/${var.project_prefix}:ref:refs/heads/main"]
+      type        = "Service"
+      identifiers = ["sagemaker.amazonaws.com"]
     }
   }
 }
@@ -81,20 +75,36 @@ resource "aws_iam_role" "sagemaker" {
   assume_role_policy = data.aws_iam_policy_document.sagemaker_assume.json
 }
 
-data "aws_iam_policy_document" "sagemaker_s3" {
+# Grant SageMaker S3 and ECR pull permissions
+
+data "aws_iam_policy_document" "sagemaker_access" {
   statement {
-    effect  = "Allow"
-    actions = ["s3:GetObject", "s3:PutObject"]
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject"]
     resources = [
       "${aws_s3_bucket.data.arn}/*",
       "${aws_s3_bucket.models.arn}/*"
     ]
   }
+  statement {
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+  statement {
+    effect    = "Allow"
+    actions   = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage"
+    ]
+    resources = [aws_ecr_repository.neuroforge.arn]
+  }
 }
 
 resource "aws_iam_policy" "sagemaker_policy" {
-  name   = "${var.project_prefix}-sagemaker-s3-policy"
-  policy = data.aws_iam_policy_document.sagemaker_s3.json
+  name   = "${var.project_prefix}-sagemaker-access"
+  policy = data.aws_iam_policy_document.sagemaker_access.json
 }
 
 resource "aws_iam_role_policy_attachment" "sagemaker_attach" {
