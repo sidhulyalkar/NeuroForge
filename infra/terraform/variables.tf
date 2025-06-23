@@ -1,4 +1,4 @@
-# terraform/variables.tf
+// terraform/variables.tf
 variable "project_prefix" {
   description = "Prefix for resource names"
   type        = string
@@ -11,15 +11,14 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
-# Default to avoid prompt during partial plans
 variable "sagemaker_image" {
-  description = "ECR URI or public image URI for SageMaker training"
+  description = "ECR URI for SageMaker container image"
   type        = string
   default     = ""
 }
 
 variable "training_instance_type" {
-  description = "Instance type for SageMaker training job"
+  description = "Instance type for SageMaker training"
   type        = string
   default     = "ml.m5.large"
 }

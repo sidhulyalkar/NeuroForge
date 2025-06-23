@@ -1,4 +1,4 @@
-# terraform/provider.tf
+// terraform/provider.tf
 terraform {
   required_version = ">= 1.0.0"
   required_providers {

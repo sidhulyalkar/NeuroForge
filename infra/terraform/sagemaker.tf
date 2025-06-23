@@ -1,4 +1,4 @@
-# terraform/sagemaker.tf
+// terraform/sagemaker.tf
 resource "aws_sagemaker_model" "neuroforge_model" {
   count              = length(var.sagemaker_image) > 0 ? 1 : 0
   name               = "${var.project_prefix}-model"
