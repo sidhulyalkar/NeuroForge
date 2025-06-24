@@ -28,3 +28,14 @@ variable "endpoint_instance_type" {
   type        = string
   default     = "ml.t2.medium"
 }
+
+variable "github_owner" {
+  description = "GitHub organization or user for OIDC trust"
+  type        = string
+}
+
+variable "github_repo" {
+  description = "GitHub repository name for OIDC trust"
+  type        = string
+}
+
