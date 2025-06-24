@@ -1,63 +1,55 @@
-# .github/workflows/ci.yml
-# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
-    # Map your GitHub secrets into job-level env vars
     env:
-      AWS_REGION:     us-west-2
+      AWS_REGION: us-west-2
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       CODEBUILD_ROLE: ${{ secrets.CODEBUILD_ROLE }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
 
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
-      - name: Validate required secrets
-        shell: bash
-        run: |
-          for var in AWS_ACCOUNT_ID CODEBUILD_ROLE ECR_REPOSITORY; do
-            if [ -z "${!var}" ]; then
-              echo "❌ Error: $var is not set"
-              exit 1
-            fi
-          done
-
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Configure AWS Credentials
+      - name: Validate secrets
+        run: |
+          for var in AWS_ACCOUNT_ID CODEBUILD_ROLE ECR_REPOSITORY; do
+            if [ -z "${!var}" ]; then
+              echo "Error: $var is not set"
+              exit 1
+            fi
+          done
+        shell: bash
+
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-region:    ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.CODEBUILD_ROLE }}
 
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-        
+
       - name: Mask ECR password
         run: echo "::add-mask::${{ steps.login-ecr.outputs.password }}"
-        
 
       - name: Build, tag & push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./infra/docker/Dockerfile
-          push:    true
-          tags:    ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -72,7 +64,7 @@ jobs:
       - name: Lint code
         run: |
           pip install flake8
-          flake8 neuroforge/
+          flake8 .
 
       - name: Run tests & collect coverage
         run: |
