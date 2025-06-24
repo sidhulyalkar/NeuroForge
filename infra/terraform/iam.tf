@@ -1,10 +1,8 @@
 // terraform/iam.tf
 
-// 1. OIDC Provider for GitHub Actions
-resource "aws_iam_openid_connect_provider" "github_actions" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+// 1. Reference existing OIDC Provider for GitHub Actions
+data "aws_iam_openid_connect_provider" "github_actions" {
+  url = "https://token.actions.githubusercontent.com"
 }
 
 // 2. CodeBuild Role with OIDC Trust
@@ -14,7 +12,7 @@ data "aws_iam_policy_document" "codebuild_trust" {
     actions   = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
+      identifiers = [data.aws_iam_openid_connect_provider.github_actions.arn]
     }
     condition {
       test     = "StringEquals"
@@ -34,12 +32,12 @@ resource "aws_iam_role" "codebuild" {
   assume_role_policy = data.aws_iam_policy_document.codebuild_trust.json
 }
 
-// 3. CodeBuild Permissions: ECR & S3
+// 3. Attach ECR & S3 Access to CodeBuild Role
 resource "aws_iam_policy" "codebuild_policy" {
   name        = "${var.project_prefix}-codebuild-policy"
-  description = "ECR push/pull and S3 access for CodeBuild"
+  description = "ECR and S3 access for CodeBuild"
   policy      = jsonencode({
-    Version = "2012-10-17",
+    Version   = "2012-10-17",
     Statement = [
       {
         Effect   = "Allow",
@@ -57,11 +55,7 @@ resource "aws_iam_policy" "codebuild_policy" {
       },
       {
         Effect   = "Allow",
-        Action   = [
-          "s3:ListBucket",
-          "s3:GetObject",
-          "s3:PutObject"
-        ],
+        Action   = ["s3:ListBucket", "s3:GetObject", "s3:PutObject"],
         Resource = [
           aws_s3_bucket.data.arn,
           format("%s/*", aws_s3_bucket.data.arn),
@@ -78,33 +72,34 @@ resource "aws_iam_role_policy_attachment" "codebuild_attach" {
   policy_arn = aws_iam_policy.codebuild_policy.arn
 }
 
-// 4. SageMaker Execution Role
-resource "aws_iam_role" "sagemaker" {
-  name               = "${var.project_prefix}-sagemaker-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect    = "Allow",
-      Principal = { Service = "sagemaker.amazonaws.com" },
-      Action    = "sts:AssumeRole"
-    }]
-  })
+// 4. SageMaker Execution Role Trust
+data "aws_iam_policy_document" "sagemaker_trust" {
+  statement {
+    effect    = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sagemaker.amazonaws.com"]
+    }
+    actions   = ["sts:AssumeRole"]
+  }
 }
 
-// 5. SageMaker Permissions: S3 & ECR Pull
+resource "aws_iam_role" "sagemaker" {
+  name               = "${var.project_prefix}-sagemaker-role"
+  assume_role_policy = data.aws_iam_policy_document.sagemaker_trust.json
+}
+
+// 5. Attach S3 & ECR Pull to SageMaker Role
 resource "aws_iam_policy" "sagemaker_policy" {
   name        = "${var.project_prefix}-sagemaker-policy"
   description = "S3 and ECR pull access for SageMaker"
   policy      = jsonencode({
-    Version = "2012-10-17",
+    Version   = "2012-10-17",
     Statement = [
       {
         Effect   = "Allow",
         Action   = ["s3:ListBucket"],
-        Resource = [
-          aws_s3_bucket.data.arn,
-          aws_s3_bucket.models.arn
-        ]
+        Resource = [aws_s3_bucket.data.arn, aws_s3_bucket.models.arn]
       },
       {
         Effect   = "Allow",
