@@ -81,3 +81,12 @@ jobs:
         with:
           name: coverage-report
           path: coverage.xml
+
+      - name: Generate Neuralake site
+        run: |
+          python - <<EOF
+          from neuralake_catalog import BCI_CATALOG
+          from neuralake.export.web import export_and_generate_site
+          export_and_generate_site(catalogs=[("bci", BCI_CATALOG)], output_dir="site")
+          EOF
+      # …deploy “site/” to your hosting…
