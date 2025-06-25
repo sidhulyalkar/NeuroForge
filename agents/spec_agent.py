@@ -1,29 +1,23 @@
-# agents/spec_agent.py
-
-import os
 import yaml
 import json
-import openai
-from openai import OpenAI
+from agents.base_agent import Agent
 
 
-class SpecAgent:
-    def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0):
+class SpecAgent(Agent):
+    def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0, client=None):
         """
         Agent to generate pipeline spec from a BCI device YAML description,
         using the new openai-python v1 API.
         """
-        # Initialize v1 client; it picks up OPENAI_API_KEY from env
-        self.client = OpenAI()
-        self.model = model_name
-        self.temperature = temperature
+        # Initialize base Agent (handles client, model, temperature, logging)
+        super().__init__(catalog=None, model_name=model_name, temperature=temperature, client=client)
 
     def load_spec(self, yaml_file: str) -> dict:
         with open(yaml_file, "r") as f:
             return yaml.safe_load(f)
 
     def generate_pipeline_spec(self, spec_data: dict) -> dict:
-        # Build messages
+        # Build messages for LLM
         system_msg = {
             "role": "system",
             "content": (
@@ -41,12 +35,8 @@ class SpecAgent:
             ),
         }
 
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[system_msg, user_msg],
-            temperature=self.temperature,
-        )
-        text = resp.choices[0].message.content
+        # Use base Agent's _chat method for retries, logging, etc.
+        text = self._chat([system_msg, user_msg])
 
         # Parse JSON safely
         try:
