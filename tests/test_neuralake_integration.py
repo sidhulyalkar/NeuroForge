@@ -1,7 +1,6 @@
 # tests/test_neuralake_integration.py
 import os
 import pytest
-from middleware.data_layer.neuralake_catalog import BCI_CATALOG
 
 @pytest.fixture(autouse=True)
 def set_env(tmp_path, monkeypatch):
@@ -17,12 +16,12 @@ def set_env(tmp_path, monkeypatch):
     (tmp_path/"raw"/"eeg").mkdir(parents=True, exist_ok=True)
     df.to_parquet(tmp_path/"raw"/"eeg"/"data.parquet")
 
-def test_raw_table_queryable():
+def test_raw_table_queryable(integration_data_lake):
     # Table has at least 10 rows
-    df = BCI_CATALOG.db("bci").table("raw_eeg").collect()
+    df = integration_data_lake.db("bci").table("raw_eeg").collect()
     assert df.shape[0] == 10
 
-def test_cleaned_table_runs():
+def test_cleaned_table_runs(integration_data_lake):
     # Should run the preprocessing function
-    df_clean = BCI_CATALOG.db("bci").table("cleaned_eeg").collect()
+    df_clean = integration_data_lake.db("bci").table("cleaned_eeg").collect()
     assert "voltage" in df_clean.columns
