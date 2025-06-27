@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import plotly.graph_objects as go
 import plotly.express as px
+import polars as pl
+import pyarrow.parquet as pq
 
 from agents.spec_agent import SpecAgent
 from agents.code_agent import CodeAgent
@@ -29,7 +31,7 @@ logging.getLogger("board_logger").setLevel(logging.WARNING)
 st.set_page_config(page_title="NeuroForge", layout="wide")
 st.title("🧠 NeuroForge: BCI Middleware Builder")
 
-tabs = st.tabs(["Spec", "Code", "Run", "Data-Lake" "Hardware", "API", "Real-Time"])
+tabs = st.tabs(["Spec", "Code", "Run", "Data-Lake", "Hardware", "API", "Real-Time"])
 
 # --- Spec tab ---
 with tabs[0]:
@@ -516,61 +518,65 @@ with tabs[2]:
 
         st.success("Pipeline complete!")
 
-    # --- Data Lake Tab ---
-    with tabs[3]:
-        if st.button("Run & Ingest to Neuralake"):
-            with st.spinner("Executing pipeline…"):
-                result = run_full_pipeline("hardware_profiles/openbci_cyton.yaml", mode=mode)
-            arr, times = result["raw"]
-            clean = result["clean"]
-            
-            # 1) Convert to a flat DataFrame
-            #    (timestamp, channel_id, voltage) for raw
-            rows = []
-            for i, t in enumerate(times):
-                for ch in range(arr.shape[0]):
-                    rows.append({
-                        "timestamp": pd.to_datetime(t, unit="s"),
-                        "channel_id": ch,
-                        "voltage": float(arr[ch, i]),
-                    })
-            df_raw = pd.DataFrame(rows)
-            
-            # 2) Write into the Neuralake ParquetTable
-            RAW_EEG = BCI_CATALOG.db("bci").raw_eeg  # your ParquetTable object
-            # This uses the underlying catalog API to materialize
-            tmp_uri = tempfile.mkdtemp(prefix="nf_run_")
-            df_raw.to_parquet(f"{tmp_uri}/data.parquet", index=False)
-            RAW_EEG.materialize(tmp_uri, mode="overwrite")
+# --- Data Lake Tab ---
+with tabs[3]:
+    if st.button("Run & Ingest to Neuralake"):
+        with st.spinner("Executing pipeline…"):
+            result = run_full_pipeline("hardware_profiles/openbci_cyton.yaml", mode=mode)
+        arr, times = result["raw"]
+        clean = result["clean"]
+        
+        # 1. Convert to a flat DataFrame
+        #    (timestamp, channel_id, voltage) for raw
+        rows = []
+        for i, t in enumerate(times):
+            for ch in range(arr.shape[0]):
+                rows.append({
+                    "timestamp": pd.to_datetime(t, unit="s"),
+                    "channel_id": ch,
+                    "voltage": float(arr[ch, i]),
+                })
+        df_raw = pd.DataFrame(rows)
+        
+        # 2. Write into the Neuralake ParquetTable
+        nlk_df = BCI_CATALOG.db("bci").raw_eeg()
+        
+        # 3. nlk_df.frame is a polars.LazyFrame; collect it to a DataFrame
+        pl_df = nlk_df.collect()
 
-            st.success("Ingested raw pipeline output into Neuralake!")
+        # 4. Write it out
+        tmp_uri = tempfile.mkdtemp(prefix="nf_run_")
+        out_path = f"{tmp_uri}/raw_eeg.parquet"
+        pl_df.write_parquet(out_path, compression="snappy")
+        st.write(f"Written parquet to {out_path}")
+        st.success("Ingested raw pipeline output into Neuralake!")
 
-            # 3) (Optional) Immediately preview
-            df_preview = BCI_CATALOG.db("bci").table("raw_eeg").collect().to_pandas()
-            st.subheader("New Raw EEG table rows")
-            st.dataframe(df_preview.tail(10))
-            st.header("🔍 BCI Catalog Explorer")
-        tables = BCI_CATALOG.db("bci").list_tables()
-        table_choice = st.selectbox("Select table to explore", tables)
-        if table_choice:
-            df = BCI_CATALOG.db("bci").table(table_choice).collect().to_pandas()
-            st.subheader(f"Preview: {table_choice}")
-            st.dataframe(df.head(500))
-            st.download_button(
-                label="Download full table as CSV",
-                data=df.to_csv(index=False),
-                file_name=f"{table_choice}.csv",
-                mime="text/csv"
-            )
-        st.markdown("---")
-        st.subheader("📡 API Explorer 📡")
-        roapi_url = st.text_input("RoAPI URL", "http://localhost:8000/swagger")
-        st.markdown(f"[Open Swagger UI]({roapi_url})")
-        st.markdown("Or use embedded GraphQL Playground below:")
-        from streamlit.components.v1 import iframe
-        iframe_url = roapi_url.replace("swagger", "graphiql")
-        iframe(iframe_url, width=800, height=400)
-
+        # Immediately preview
+        df_preview = BCI_CATALOG.db("bci").table("raw_eeg").collect().to_pandas()
+        st.subheader("New Raw EEG table rows")
+        st.dataframe(df_preview.tail(10))
+        st.header("🔍 BCI Catalog Explorer")
+        
+    tables = BCI_CATALOG.db("bci").get_tables()
+    table_choice = st.selectbox("Select table to explore", tables)
+    if table_choice:
+        df = BCI_CATALOG.db("bci").table(table_choice).collect().to_pandas()
+        st.subheader(f"Preview: {table_choice}")
+        st.dataframe(df.head(500))
+        st.download_button(
+            label="Download full table as CSV",
+            data=df.to_csv(index=False),
+            file_name=f"{table_choice}.csv",
+            mime="text/csv"
+        )
+    st.markdown("---")
+    st.subheader("📡 API Explorer 📡")
+    roapi_url = st.text_input("RoAPI URL", "http://localhost:8000/swagger")
+    st.markdown(f"[Open Swagger UI]({roapi_url})")
+    st.markdown("Or use embedded GraphQL Playground below:")
+    from streamlit.components.v1 import iframe
+    iframe_url = roapi_url.replace("swagger", "graphiql")
+    iframe(iframe_url, width=800, height=400)
 
 # --- Hardware (SDK) Tab ---
 with tabs[4]:

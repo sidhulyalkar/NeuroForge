@@ -29,7 +29,7 @@ class CodeAgent(Agent):
             table_schema = {}
             if self.catalog and "tables" in spec:
                 tbl = self.catalog.db("bci").table(spec["tables"])
-                table_schema = tbl.schema.to_dict()+
+                table_schema = tbl.schema.to_dict()
             # 2) Build a prompt:
             prompt = (
                 f"# {layer} module stub\n"
