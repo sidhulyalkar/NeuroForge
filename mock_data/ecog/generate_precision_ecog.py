@@ -1,4 +1,4 @@
-# mock_data/generate_precision_ecog.py
+# mock_data/ecog/generate_precision_ecog.py
 
 import numpy as np
 import pandas as pd

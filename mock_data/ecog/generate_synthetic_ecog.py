@@ -1,3 +1,4 @@
+# mock_data/ecog/genereate_synthetic_ecog.py
 import numpy as np
 import pandas as pd
 
