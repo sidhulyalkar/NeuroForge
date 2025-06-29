@@ -18,6 +18,7 @@ import pyarrow.parquet as pq
 from agents.spec_agent import SpecAgent
 from agents.code_agent import CodeAgent
 from pipeline import run_full_pipeline
+
 from middleware.preprocessing.preprocessing import run as preprocess
 from middleware.features.features import run as extract_features
 from middleware.decoding.decoding import run as decode
@@ -31,7 +32,7 @@ logging.getLogger("board_logger").setLevel(logging.WARNING)
 st.set_page_config(page_title="NeuroForge", layout="wide")
 st.title("🧠 NeuroForge: BCI Middleware Builder")
 
-tabs = st.tabs(["Spec", "Code", "Run", "Data-Lake", "Hardware", "API", "Real-Time"])
+tabs = st.tabs(["Spec", "Code", "Run", "Data-Lake", "Hardware", "API", "Real-Time", "Model-Training"])
 
 # --- Spec tab ---
 with tabs[0]:
@@ -556,7 +557,18 @@ with tabs[3]:
         st.subheader("New Raw EEG table rows")
         st.dataframe(df_preview.tail(10))
         st.header("🔍 BCI Catalog Explorer")
-        
+
+        # after writing to tmp_uri/raw_eeg.parquet...
+        with open(out_path, "rb") as f:
+            data = f.read()
+
+        st.download_button(
+            label="Download raw EEG parquet",
+            data=data,
+            file_name="raw_eeg.parquet",
+            mime="application/octet-stream"
+        )
+
     tables = BCI_CATALOG.db("bci").get_tables()
     table_choice = st.selectbox("Select table to explore", tables)
     if table_choice:
@@ -571,12 +583,41 @@ with tabs[3]:
         )
     st.markdown("---")
     st.subheader("📡 API Explorer 📡")
+    
     roapi_url = st.text_input("RoAPI URL", "http://localhost:8000/swagger")
     st.markdown(f"[Open Swagger UI]({roapi_url})")
     st.markdown("Or use embedded GraphQL Playground below:")
+    st.markdown(f"""
+                <iframe
+                src="https://swagger/graphql"
+                width="100%"
+                height="600px"
+                ></iframe>
+                """, unsafe_allow_html=True)
+
     from streamlit.components.v1 import iframe
     iframe_url = roapi_url.replace("swagger", "graphiql")
     iframe(iframe_url, width=800, height=400)
+
+    from st_aggrid import AgGrid, GridOptionsBuilder
+
+    # 1) Fetch your table into pandas
+    df = BCI_CATALOG.db("bci").table(table_choice).collect().to_pandas()
+
+    # 2) Build grid options
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_pagination(paginationAutoPageSize=True)
+    gb.configure_default_column(filterable=True, sortable=True, resizable=True)
+    grid_options = gb.build()
+
+    # 3) Render AG-Grid
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        height=400,
+        width="100%",
+        theme="alpine"
+    )
 
 # --- Hardware (SDK) Tab ---
 with tabs[4]:
@@ -659,3 +700,56 @@ with tabs[6]:
         df_rt = pd.DataFrame(st.session_state.logs, columns=["time_s", "pred_mean"])
         df_rt = df_rt.set_index("time_s")
         st.line_chart(df_rt)
+
+# --- Model Training tab ---
+with tabs[7]:
+    import boto3
+    from uuid import uuid4
+
+    sm = boto3.client(
+        'sagemaker',
+        region_name=st.secrets['AWS_REGION']
+    )
+    project = st.secrets['PROJECT_PREFIX']
+
+    st.header("📈 Training UI")
+    table = st.selectbox("Data Table", BCI_CATALOG.db("bci").get_tables())
+    epochs = st.number_input("Epochs", min_value=1, max_value=100, value=10)
+
+    if st.button("Start Training"):
+        job_name = f"{project}-train-{uuid4().hex[:6]}"
+        image = (
+            f"{st.secrets['AWS_ACCOUNT_ID']}.dkr.ecr."
+            f"{st.secrets['AWS_REGION']}.amazonaws.com/"
+            f"{st.secrets['ECR_REPOSITORY']}:latest"
+        )
+        resp = sm.create_training_job(
+            TrainingJobName=job_name,
+            RoleArn=st.secrets['SAGEMAKER_ROLE_ARN'],
+            AlgorithmSpecification={
+                'TrainingImage': image,
+                'TrainingInputMode': 'File'
+            },
+            InputDataConfig=[{
+                'ChannelName': 'training',
+                'DataSource': {
+                    'S3DataSource': {
+                        'S3Uri': f"s3://{project}-data/{table}/",
+                        'S3DataType': 'S3Prefix',
+                        'S3DataDistributionType': 'FullyReplicated'
+                    }
+                }
+            }],
+            OutputDataConfig={'S3OutputPath': f"s3://{project}-models/"},
+            ResourceConfig={
+                'InstanceType': 'ml.m5.large',
+                'InstanceCount': 1,
+                'VolumeSizeInGB': 50
+            },
+            StoppingCondition={'MaxRuntimeInSeconds': 3600}
+        )
+        st.success(f"Started training job: {job_name}")
+
+    # Poll status
+    status = sm.describe_training_job(TrainingJobName=job_name)['TrainingJobStatus']
+    st.write("Current status:", status)
