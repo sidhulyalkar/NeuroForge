@@ -4,13 +4,17 @@ from agents.base_agent import Agent
 
 
 class SpecAgent(Agent):
-    def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0, client=None):
+    def __init__(
+        self, model_name: str = "gpt-4", temperature: float = 0.0, client=None
+    ):
         """
         Agent to generate pipeline spec from a BCI device YAML description,
         using the new openai-python v1 API.
         """
         # Initialize base Agent (handles client, model, temperature, logging)
-        super().__init__(catalog=None, model_name=model_name, temperature=temperature, client=client)
+        super().__init__(
+            catalog=None, model_name=model_name, temperature=temperature, client=client
+        )
 
     def load_spec(self, yaml_file: str) -> dict:
         with open(yaml_file, "r") as f:

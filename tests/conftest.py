@@ -12,6 +12,7 @@ def _reload_catalog(tmp_path):
     """Helper: set DATA_LAKE_URI and reload catalog module."""
     os.environ["DATA_LAKE_URI"] = str(tmp_path)
     import middleware.data_layer.neuralake_catalog as C
+
     importlib.reload(C)
     return C.BCI_CATALOG
 
@@ -26,16 +27,22 @@ def catalog_data_lake(tmp_path):
     eeg_dir.mkdir(parents=True, exist_ok=True)
     t0 = pd.Timestamp("2025-06-01")
     ts = pd.date_range(t0, periods=100, freq="10ms")
-    rows = [{"timestamp": t, "channel_id": ch, "voltage": 0.0}
-            for t in ts for ch in range(4)]
+    rows = [
+        {"timestamp": t, "channel_id": ch, "voltage": 0.0}
+        for t in ts
+        for ch in range(4)
+    ]
     pd.DataFrame(rows).to_parquet(eeg_dir / "data.parquet", index=False)
 
     # ECoG: 1s @200Hz × 8ch = 1600 rows
     ecog_dir = tmp_path / "raw" / "ecog"
     ecog_dir.mkdir(parents=True, exist_ok=True)
     ts2 = pd.date_range(t0, periods=200, freq="5ms")
-    rows2 = [{"timestamp": t, "channel_id": ch, "voltage": 0.0}
-             for t in ts2 for ch in range(8)]
+    rows2 = [
+        {"timestamp": t, "channel_id": ch, "voltage": 0.0}
+        for t in ts2
+        for ch in range(8)
+    ]
     pd.DataFrame(rows2).to_parquet(ecog_dir / "data.parquet", index=False)
 
     return _reload_catalog(tmp_path)
@@ -48,11 +55,13 @@ def agent_data_lake(tmp_path):
     """
     eeg_dir = tmp_path / "raw" / "eeg"
     eeg_dir.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame({
-        "timestamp": pd.date_range("2025-06-01", periods=5, freq="S"),
-        "channel_id": [0,1,0,1,0],
-        "voltage": [0.1,0.2,-0.1,0.3,0.0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2025-06-01", periods=5, freq="S"),
+            "channel_id": [0, 1, 0, 1, 0],
+            "voltage": [0.1, 0.2, -0.1, 0.3, 0.0],
+        }
+    )
     df.to_parquet(eeg_dir / "data.parquet", index=False)
 
     return _reload_catalog(tmp_path)
@@ -65,11 +74,13 @@ def integration_data_lake(tmp_path):
     """
     eeg_dir = tmp_path / "raw" / "eeg"
     eeg_dir.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame({
-        "timestamp": pd.date_range("2025-06-01", periods=10, freq="100ms"),
-        "channel_id": [i % 2 for i in range(10)],
-        "voltage": 0.0,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2025-06-01", periods=10, freq="100ms"),
+            "channel_id": [i % 2 for i in range(10)],
+            "voltage": 0.0,
+        }
+    )
     df.to_parquet(eeg_dir / "data.parquet", index=False)
 
     return _reload_catalog(tmp_path)

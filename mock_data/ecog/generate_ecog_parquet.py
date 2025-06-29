@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
+
 def generate_ecog(
     channels=32,
     fs=1000,
@@ -38,8 +39,11 @@ def generate_ecog(
 
     # Build DataFrame
     df = pd.DataFrame(data_car.T, columns=[f"chan_{i+1}" for i in range(channels)])
-    df.insert(0, "timestamp", pd.date_range("2025-01-01", periods=len(t), freq=f"{1000/fs}ms"))
+    df.insert(
+        0, "timestamp", pd.date_range("2025-01-01", periods=len(t), freq=f"{1000/fs}ms")
+    )
     return df
+
 
 def main(out_dir, **gen_kwargs):
     os.makedirs(out_dir, exist_ok=True)
@@ -48,18 +52,22 @@ def main(out_dir, **gen_kwargs):
     df.to_parquet(out_path, index=False)
     print(f"✅ Wrote {df.shape[0]}×{df.shape[1]} to {out_path}")
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser(
         description="Generate synthetic ECoG and write to Parquet"
     )
-    p.add_argument("--out-dir", required=True,
-                   help="Where to write .parquet (e.g. $DATA_LAKE_URI/raw/ecog)")
+    p.add_argument(
+        "--out-dir",
+        required=True,
+        help="Where to write .parquet (e.g. $DATA_LAKE_URI/raw/ecog)",
+    )
     p.add_argument("--channels", type=int, default=32)
     p.add_argument("--fs", type=int, default=1000)
     p.add_argument("--duration", type=float, default=10)
     p.add_argument("--noise-level", type=float, default=0.2)
-    p.add_argument("--low-freqs", nargs="+", type=float, default=[10,20,40])
-    p.add_argument("--high-gamma-band", nargs=2, type=float, default=[70,150])
+    p.add_argument("--low-freqs", nargs="+", type=float, default=[10, 20, 40])
+    p.add_argument("--high-gamma-band", nargs=2, type=float, default=[70, 150])
     args = p.parse_args()
     # unpack high_gamma_band tuple
     kwargs = dict(

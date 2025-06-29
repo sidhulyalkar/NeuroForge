@@ -32,7 +32,18 @@ logging.getLogger("board_logger").setLevel(logging.WARNING)
 st.set_page_config(page_title="NeuroForge", layout="wide")
 st.title("🧠 NeuroForge: BCI Middleware Builder")
 
-tabs = st.tabs(["Spec", "Code", "Run", "Data-Lake", "Hardware", "API", "Real-Time", "Model-Training"])
+tabs = st.tabs(
+    [
+        "Spec",
+        "Code",
+        "Run",
+        "Data-Lake",
+        "Hardware",
+        "API",
+        "Real-Time",
+        "Model-Training",
+    ]
+)
 
 # --- Spec tab ---
 with tabs[0]:
@@ -523,25 +534,29 @@ with tabs[2]:
 with tabs[3]:
     if st.button("Run & Ingest to Neuralake"):
         with st.spinner("Executing pipeline…"):
-            result = run_full_pipeline("hardware_profiles/openbci_cyton.yaml", mode=mode)
+            result = run_full_pipeline(
+                "hardware_profiles/openbci_cyton.yaml", mode=mode
+            )
         arr, times = result["raw"]
         clean = result["clean"]
-        
+
         # 1. Convert to a flat DataFrame
         #    (timestamp, channel_id, voltage) for raw
         rows = []
         for i, t in enumerate(times):
             for ch in range(arr.shape[0]):
-                rows.append({
-                    "timestamp": pd.to_datetime(t, unit="s"),
-                    "channel_id": ch,
-                    "voltage": float(arr[ch, i]),
-                })
+                rows.append(
+                    {
+                        "timestamp": pd.to_datetime(t, unit="s"),
+                        "channel_id": ch,
+                        "voltage": float(arr[ch, i]),
+                    }
+                )
         df_raw = pd.DataFrame(rows)
-        
+
         # 2. Write into the Neuralake ParquetTable
         nlk_df = BCI_CATALOG.db("bci").raw_eeg()
-        
+
         # 3. nlk_df.frame is a polars.LazyFrame; collect it to a DataFrame
         pl_df = nlk_df.collect()
 
@@ -566,7 +581,7 @@ with tabs[3]:
             label="Download raw EEG parquet",
             data=data,
             file_name="raw_eeg.parquet",
-            mime="application/octet-stream"
+            mime="application/octet-stream",
         )
 
     tables = BCI_CATALOG.db("bci").get_tables()
@@ -579,23 +594,27 @@ with tabs[3]:
             label="Download full table as CSV",
             data=df.to_csv(index=False),
             file_name=f"{table_choice}.csv",
-            mime="text/csv"
+            mime="text/csv",
         )
     st.markdown("---")
     st.subheader("📡 API Explorer 📡")
-    
+
     roapi_url = st.text_input("RoAPI URL", "http://localhost:8000/swagger")
     st.markdown(f"[Open Swagger UI]({roapi_url})")
     st.markdown("Or use embedded GraphQL Playground below:")
-    st.markdown(f"""
+    st.markdown(
+        f"""
                 <iframe
                 src="https://swagger/graphql"
                 width="100%"
                 height="600px"
                 ></iframe>
-                """, unsafe_allow_html=True)
+                """,
+        unsafe_allow_html=True,
+    )
 
     from streamlit.components.v1 import iframe
+
     iframe_url = roapi_url.replace("swagger", "graphiql")
     iframe(iframe_url, width=800, height=400)
 
@@ -611,13 +630,7 @@ with tabs[3]:
     grid_options = gb.build()
 
     # 3) Render AG-Grid
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        height=400,
-        width="100%",
-        theme="alpine"
-    )
+    AgGrid(df, gridOptions=grid_options, height=400, width="100%", theme="alpine")
 
 # --- Hardware (SDK) Tab ---
 with tabs[4]:
@@ -706,11 +719,8 @@ with tabs[7]:
     import boto3
     from uuid import uuid4
 
-    sm = boto3.client(
-        'sagemaker',
-        region_name=st.secrets['AWS_REGION']
-    )
-    project = st.secrets['PROJECT_PREFIX']
+    sm = boto3.client("sagemaker", region_name=st.secrets["AWS_REGION"])
+    project = st.secrets["PROJECT_PREFIX"]
 
     st.header("📈 Training UI")
     table = st.selectbox("Data Table", BCI_CATALOG.db("bci").get_tables())
@@ -725,31 +735,33 @@ with tabs[7]:
         )
         resp = sm.create_training_job(
             TrainingJobName=job_name,
-            RoleArn=st.secrets['SAGEMAKER_ROLE_ARN'],
+            RoleArn=st.secrets["SAGEMAKER_ROLE_ARN"],
             AlgorithmSpecification={
-                'TrainingImage': image,
-                'TrainingInputMode': 'File'
+                "TrainingImage": image,
+                "TrainingInputMode": "File",
             },
-            InputDataConfig=[{
-                'ChannelName': 'training',
-                'DataSource': {
-                    'S3DataSource': {
-                        'S3Uri': f"s3://{project}-data/{table}/",
-                        'S3DataType': 'S3Prefix',
-                        'S3DataDistributionType': 'FullyReplicated'
-                    }
+            InputDataConfig=[
+                {
+                    "ChannelName": "training",
+                    "DataSource": {
+                        "S3DataSource": {
+                            "S3Uri": f"s3://{project}-data/{table}/",
+                            "S3DataType": "S3Prefix",
+                            "S3DataDistributionType": "FullyReplicated",
+                        }
+                    },
                 }
-            }],
-            OutputDataConfig={'S3OutputPath': f"s3://{project}-models/"},
+            ],
+            OutputDataConfig={"S3OutputPath": f"s3://{project}-models/"},
             ResourceConfig={
-                'InstanceType': 'ml.m5.large',
-                'InstanceCount': 1,
-                'VolumeSizeInGB': 50
+                "InstanceType": "ml.m5.large",
+                "InstanceCount": 1,
+                "VolumeSizeInGB": 50,
             },
-            StoppingCondition={'MaxRuntimeInSeconds': 3600}
+            StoppingCondition={"MaxRuntimeInSeconds": 3600},
         )
         st.success(f"Started training job: {job_name}")
 
     # Poll status
-    status = sm.describe_training_job(TrainingJobName=job_name)['TrainingJobStatus']
+    status = sm.describe_training_job(TrainingJobName=job_name)["TrainingJobStatus"]
     st.write("Current status:", status)

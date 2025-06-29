@@ -1,22 +1,27 @@
-
 # agents/code_agent.py
 
 from agents.base_agent import Agent
 import json
 
+
 class CodeAgent(Agent):
-    def __init__(self,
-                 pipeline_catalog=None,
-                 model_name: str = "gpt-4",
-                 temperature: float = 0.0,
-                 client=None):
-        super().__init__(catalog=pipeline_catalog,
-                         model_name=model_name,
-                         temperature=temperature,
-                         client=client)
+    def __init__(
+        self,
+        pipeline_catalog=None,
+        model_name: str = "gpt-4",
+        temperature: float = 0.0,
+        client=None,
+    ):
+        super().__init__(
+            catalog=pipeline_catalog,
+            model_name=model_name,
+            temperature=temperature,
+            client=client,
+        )
         """
         Agent to generate Python code stubs from a pipeline spec dict.
         """
+
     def generate_code(self, pipeline_spec: dict) -> dict:
         """
         For each key in pipeline_spec (e.g. 'preprocessing', 'features', etc.),
@@ -44,10 +49,15 @@ class CodeAgent(Agent):
                 "    # TODO: implement this\n"
                 "    pass\n"
             )
-            resp = self._chat([
-                {"role": "system", "content": "You are a Python expert specialized in BCI workflows."},
-                {"role": "user", "content": prompt},
-            ])
+            resp = self._chat(
+                [
+                    {
+                        "role": "system",
+                        "content": "You are a Python expert specialized in BCI workflows.",
+                    },
+                    {"role": "user", "content": prompt},
+                ]
+            )
             code = resp
             stubs[layer] = code
         return stubs

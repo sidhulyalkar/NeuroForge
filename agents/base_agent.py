@@ -3,12 +3,15 @@ import logging
 from openai import OpenAI
 from neuralake.core import Catalog
 
+
 class Agent:
-    def __init__(self,
-                 catalog: Catalog = None,
-                 model_name: str = "gpt-4",
-                 temperature: float = 0.0,
-                 client: OpenAI = None):
+    def __init__(
+        self,
+        catalog: Catalog = None,
+        model_name: str = "gpt-4",
+        temperature: float = 0.0,
+        client: OpenAI = None,
+    ):
         self.catalog = catalog
         self.model_name = model_name
         self.temperature = temperature
